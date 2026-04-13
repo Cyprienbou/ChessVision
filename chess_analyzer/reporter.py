@@ -195,6 +195,43 @@ select { background: #0f3460; color: #e0e0e0; border: 1px solid #00b894; border-
 .pat-move.good { background: #00b89420; border: 1px solid #00b89450; color: #00b894; }
 .pat-empty { color: #a0a0c0; text-align: center; padding: 60px 20px;
   font-size: 0.95rem; background: #16213e; border-radius: 10px; border: 1px solid #0f3460; }
+
+/* ── Documentation tab ──────────────────────────────────────────────────────── */
+.doc-toc { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 36px; }
+.doc-toc a { padding: 7px 16px; border-radius: 20px; font-size: 0.82rem; font-weight: 600;
+  background: #16213e; border: 1px solid #0f3460; color: #74b9ff;
+  text-decoration: none; transition: all .15s; }
+.doc-toc a:hover { background: #0f3460; border-color: #74b9ff; }
+.doc-section { margin-bottom: 44px; }
+.doc-section-title { font-size: 1.1rem; font-weight: 800; color: #ffffff;
+  border-left: 4px solid #00b894; padding: 10px 16px;
+  background: #0d1b38; border-radius: 0 8px 8px 0; margin-bottom: 20px;
+  display: flex; align-items: center; gap: 10px; }
+.doc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); gap: 16px; }
+.doc-card { background: #16213e; border: 1px solid #0f3460; border-radius: 12px; padding: 20px 22px; }
+.doc-card-name { font-size: 1rem; font-weight: 700; color: #ffffff; margin-bottom: 6px; }
+.doc-card-def { font-size: 0.88rem; color: #cdd6f4; line-height: 1.6; margin-bottom: 10px; }
+.doc-formula { background: #0a1628; border-left: 3px solid #74b9ff; border-radius: 0 6px 6px 0;
+  padding: 8px 12px; font-size: 0.82rem; color: #74b9ff; margin-bottom: 10px;
+  font-family: monospace; line-height: 1.5; }
+.doc-example { background: #0a2818; border-left: 3px solid #00b894; border-radius: 0 6px 6px 0;
+  padding: 8px 12px; font-size: 0.82rem; color: #00b894; margin-bottom: 10px;
+  line-height: 1.5; }
+.doc-example::before { content: "Example: "; font-weight: 700; }
+.doc-source { font-size: 0.75rem; color: #6c7a9c; margin-top: 6px; }
+.doc-source span { display: inline-block; padding: 2px 8px; border-radius: 10px;
+  background: #0f3460; color: #a0a0c0; font-size: 0.72rem; margin-right: 4px; }
+.doc-threshold-table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 0.84rem; }
+.doc-threshold-table th { color: #a0a0c0; font-weight: 600; text-align: left;
+  padding: 6px 10px; border-bottom: 1px solid #0f3460; }
+.doc-threshold-table td { color: #cdd6f4; padding: 6px 10px; border-bottom: 1px solid #0d1b38; }
+.doc-threshold-table tr:last-child td { border-bottom: none; }
+.doc-tactic-badge { display: inline-block; padding: 2px 10px; border-radius: 10px;
+  font-size: 0.78rem; font-weight: 600; margin: 2px; background: #0f346033; border: 1px solid #0f3460; color: #a0c4ff; }
+.doc-intro { color: #a0a0c0; font-size: 0.92rem; line-height: 1.7;
+  background: #16213e; border-radius: 10px; padding: 18px 22px;
+  border: 1px solid #0f3460; margin-bottom: 32px; }
+.doc-intro strong { color: #ffffff; }
 """
 
 # ── Chart.js CDN ──────────────────────────────────────────────────────────────
@@ -1250,6 +1287,7 @@ def _build_dashboard(df: pd.DataFrame, opening_df: pd.DataFrame, username: str) 
   <button class="ptab" id="ptab-openings"  onclick="showPage('openings')">Openings</button>
   <button class="ptab" id="ptab-games"     onclick="showPage('games')">Games</button>
   <button class="ptab" id="ptab-patterns"  onclick="showPage('patterns')">⚡ Patterns</button>
+  <button class="ptab" id="ptab-docs"      onclick="showPage('docs')">📖 How it works</button>
 </div>
 
 <!-- \u2500\u2500 Global filter bar \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500 -->
@@ -1560,6 +1598,452 @@ def _build_dashboard(df: pd.DataFrame, opening_df: pd.DataFrame, username: str) 
 
 </div>
 </div><!-- /page-patterns -->
+
+<!-- ══════════════════════════════════════════════════════════════════════════
+     PAGE 5: DOCUMENTATION
+     ══════════════════════════════════════════════════════════════════════════ -->
+<div id="page-docs" class="page-content">
+<div class="container">
+
+<h2>📖 How metrics are calculated</h2>
+
+<p class="doc-intro">
+  This page explains every number you see in the dashboard — what it means, how it is computed,
+  and where the data comes from. <strong>No data science background needed.</strong>
+  ChessVision uses two data sources: the <strong>Chess.com API</strong> (game results, ratings,
+  opening tags) and the <strong>Stockfish engine</strong> (move-by-move evaluation, best moves,
+  centipawn loss). Stockfish is the same engine used by world-class players; it assigns a score
+  in <em>centipawns</em> (cp) — one pawn of advantage = 100 cp.
+</p>
+
+<!-- Table of contents -->
+<nav class="doc-toc">
+  <a href="#doc-general">🏆 General Performance</a>
+  <a href="#doc-errors">⚠️ Error Metrics</a>
+  <a href="#doc-tactics">🧩 Tactic Types</a>
+  <a href="#doc-openings">♟️ Opening Metrics</a>
+  <a href="#doc-opponent">👤 Opponent Metrics</a>
+  <a href="#doc-patterns">⚡ Pattern Analysis</a>
+  <a href="#doc-critical">🔍 Critical Patterns</a>
+</nav>
+
+<!-- ── 1. General Performance ─────────────────────────────────────────────── -->
+<div class="doc-section" id="doc-general">
+  <div class="doc-section-title">🏆 General Performance</div>
+  <div class="doc-grid">
+
+    <div class="doc-card">
+      <div class="doc-card-name">Games Played</div>
+      <div class="doc-card-def">The total number of games included in the current view, after any filters (color, time control) are applied.</div>
+      <div class="doc-formula">Count of games matching the active filters</div>
+      <div class="doc-example">You played 200 games total. With the "Blitz" filter on, only 80 blitz games are counted.</div>
+      <div class="doc-source"><span>Chess.com API</span></div>
+    </div>
+
+    <div class="doc-card">
+      <div class="doc-card-name">Win Rate</div>
+      <div class="doc-card-def">The share of games you won, expressed as a percentage. A draw does not count as a win.</div>
+      <div class="doc-formula">Win Rate = (Games won ÷ Total games) × 100</div>
+      <div class="doc-example">You won 55 out of 100 games → Win Rate = 55%</div>
+      <div class="doc-source"><span>Chess.com API</span></div>
+    </div>
+
+    <div class="doc-card">
+      <div class="doc-card-name">Draw Rate &amp; Loss Rate</div>
+      <div class="doc-card-def">Same principle as win rate, applied to draws and losses respectively. The three rates always add up to 100%.</div>
+      <div class="doc-formula">Draw Rate = (Draws ÷ Total games) × 100<br>Loss Rate = (Losses ÷ Total games) × 100</div>
+      <div class="doc-example">55 wins, 10 draws, 35 losses out of 100 games → 55% / 10% / 35%</div>
+      <div class="doc-source"><span>Chess.com API</span></div>
+    </div>
+
+    <div class="doc-card">
+      <div class="doc-card-name">Accuracy</div>
+      <div class="doc-card-def">
+        A score from 0 to 100 that measures how close your moves were to Stockfish's best move throughout the game.
+        100% means every move was perfect; 50% means you made many suboptimal choices.
+        It is computed per game and then averaged across all games.
+      </div>
+      <div class="doc-formula">
+        For each move: Move Score = 100 − f(centipawn loss), where f is a smoothing curve<br>
+        Game Accuracy = average of all move scores<br>
+        Displayed Accuracy = average across all selected games
+      </div>
+      <div class="doc-example">In a 30-move game, if your average centipawn loss per move is small, your accuracy will be around 85–95%. A game with a single big blunder might drop to 70%.</div>
+      <div class="doc-source"><span>Stockfish engine</span></div>
+    </div>
+
+    <div class="doc-card">
+      <div class="doc-card-name">Avg Blunders / Game</div>
+      <div class="doc-card-def">The average number of blunder-level mistakes you made per game. Lower is better.</div>
+      <div class="doc-formula">Avg Blunders/Game = Total blunders across all games ÷ Number of games</div>
+      <div class="doc-example">You made 40 blunders across 20 games → 2.0 blunders per game on average.</div>
+      <div class="doc-source"><span>Stockfish engine</span></div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ── 2. Error Metrics ───────────────────────────────────────────────────── -->
+<div class="doc-section" id="doc-errors">
+  <div class="doc-section-title">⚠️ Error Metrics</div>
+
+  <div class="doc-card" style="margin-bottom:16px">
+    <div class="doc-card-name">Centipawn Loss (CP Loss)</div>
+    <div class="doc-card-def">
+      The centipawn loss of a move is the difference between the evaluation before and after you played it,
+      measured in centipawns (1 pawn = 100 cp). It tells you how much ground you lost with a single move.
+      Stockfish evaluates the position before your move, you play, then it re-evaluates — the drop is your centipawn loss.
+    </div>
+    <div class="doc-formula">CP Loss = Eval before your move − Eval after your move (from your perspective)</div>
+    <div class="doc-example">Stockfish says position is +0.5 (slightly better for you). You play a bad move, now it's −0.8 (better for opponent). CP Loss = 130 cp → classified as a Blunder.</div>
+    <div class="doc-source"><span>Stockfish engine</span></div>
+  </div>
+
+  <div class="doc-grid">
+
+    <div class="doc-card">
+      <div class="doc-card-name">Error Classifications</div>
+      <div class="doc-card-def">Every move is scored by Stockfish. If the centipawn loss crosses a threshold, the move is flagged as an error of the corresponding severity.</div>
+      <table class="doc-threshold-table">
+        <tr><th>Label</th><th>CP Loss threshold</th><th>Severity</th></tr>
+        <tr><td>Inaccuracy</td><td>&gt; 40 cp</td><td>Minor slip</td></tr>
+        <tr><td>Mistake</td><td>&gt; 80 cp</td><td>Significant error</td></tr>
+        <tr><td>Blunder</td><td>&gt; 150 cp</td><td>Serious error</td></tr>
+      </table>
+      <div class="doc-source"><span>Stockfish engine</span></div>
+    </div>
+
+    <div class="doc-card">
+      <div class="doc-card-name">Blunders per Game</div>
+      <div class="doc-card-def">Count of moves in a game where your centipawn loss exceeded 150 cp. Each such move is one blunder, regardless of how big the loss was.</div>
+      <div class="doc-formula">Blunders = count of moves with CP Loss &gt; 150 in that game</div>
+      <div class="doc-example">In one game you made 3 moves with losses of 200 cp, 180 cp, and 90 cp. Only the first two are blunders (≥150 cp); the third is a mistake.</div>
+      <div class="doc-source"><span>Stockfish engine</span></div>
+    </div>
+
+    <div class="doc-card">
+      <div class="doc-card-name">Mistakes per Game</div>
+      <div class="doc-card-def">Count of moves with a centipawn loss above 80 cp but at or below 150 cp. Less severe than a blunder, but still a meaningful error.</div>
+      <div class="doc-formula">Mistakes = count of moves with 80 cp &lt; CP Loss ≤ 150 cp</div>
+      <div class="doc-example">A move that loses half a pawn (80 cp) is a mistake. A move that loses a full pawn (100 cp) is also a mistake.</div>
+      <div class="doc-source"><span>Stockfish engine</span></div>
+    </div>
+
+    <div class="doc-card">
+      <div class="doc-card-name">Inaccuracies per Game</div>
+      <div class="doc-card-def">Count of moves with a centipawn loss above 40 cp but at or below 80 cp. These are small but suboptimal decisions.</div>
+      <div class="doc-formula">Inaccuracies = count of moves with 40 cp &lt; CP Loss ≤ 80 cp</div>
+      <div class="doc-example">Slightly misjudging piece coordination and losing a third of a pawn's worth of advantage counts as an inaccuracy.</div>
+      <div class="doc-source"><span>Stockfish engine</span></div>
+    </div>
+
+    <div class="doc-card">
+      <div class="doc-card-name">Error Phase (Opening / Middlegame / Endgame)</div>
+      <div class="doc-card-def">Each error is tagged with the phase of the game in which it occurred, based on the move number at the time of the mistake.</div>
+      <div class="doc-formula">Opening: moves 1–10 &nbsp;·&nbsp; Middlegame: moves 11–30 &nbsp;·&nbsp; Endgame: move 31+</div>
+      <div class="doc-example">A blunder on move 8 is tagged "Opening". A blunder on move 25 is tagged "Middlegame". The "Blunders by Phase" chart shows how your mistakes are distributed across these three stages.</div>
+      <div class="doc-source"><span>Stockfish engine</span></div>
+    </div>
+
+    <div class="doc-card">
+      <div class="doc-card-name">Avg 1st Blunder Move</div>
+      <div class="doc-card-def">The average move number at which you make your first blunder in a game. A higher number means you tend to stay clean longer before cracking.</div>
+      <div class="doc-formula">First Blunder Move = the move number of the earliest blunder in a game<br>Average = mean across all games that had at least one blunder</div>
+      <div class="doc-example">In 5 games your first blunders occurred on moves 12, 18, 9, 24, and 15. Average = (12+18+9+24+15) ÷ 5 = 15.6</div>
+      <div class="doc-source"><span>Stockfish engine</span></div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ── 3. Tactic Types ────────────────────────────────────────────────────── -->
+<div class="doc-section" id="doc-tactics">
+  <div class="doc-section-title">🧩 Tactic Types (Missed Tactics)</div>
+
+  <div class="doc-card" style="margin-bottom:16px">
+    <div class="doc-card-def">
+      When you blunder, ChessVision automatically analyses <em>why</em> the move was bad by
+      inspecting the board position. Each blunder is classified into one of the categories below.
+      The "Missed Tactics" chart shows which patterns you miss most often.
+    </div>
+  </div>
+
+  <div class="doc-grid">
+
+    <div class="doc-card">
+      <div class="doc-card-name">Hanging Piece</div>
+      <div class="doc-card-def">You left a piece undefended (or moved away a defender), allowing your opponent to capture it for free.</div>
+      <div class="doc-example">You move your bishop, accidentally leaving your knight attacked with no defender. Opponent takes it for free.</div>
+    </div>
+
+    <div class="doc-card">
+      <div class="doc-card-name">Fork</div>
+      <div class="doc-card-def">You made a move that allows the opponent to attack two of your pieces simultaneously with one of their pieces, and you can only save one.</div>
+      <div class="doc-example">Opponent plays Nd5 — the knight attacks both your queen and your rook at the same time. You can only move one of them.</div>
+    </div>
+
+    <div class="doc-card">
+      <div class="doc-card-name">Pin</div>
+      <div class="doc-card-def">You moved a piece that was shielding a more valuable piece behind it, creating a pin — the moved piece cannot safely move without exposing the piece behind it.</div>
+      <div class="doc-example">Your knight is between your king and the opponent's bishop. Moving the knight exposes the king to check — the knight is pinned.</div>
+    </div>
+
+    <div class="doc-card">
+      <div class="doc-card-name">Skewer</div>
+      <div class="doc-card-def">Like a pin in reverse — a valuable piece is attacked and forced to move, exposing a less valuable piece behind it that gets captured.</div>
+      <div class="doc-example">Opponent's rook attacks your queen. You move the queen to safety; now your rook behind it is captured.</div>
+    </div>
+
+    <div class="doc-card">
+      <div class="doc-card-name">Discovered Attack</div>
+      <div class="doc-card-def">You made a move that allowed the opponent to uncover an attack from a piece behind the piece that moved, hitting a target you did not see coming.</div>
+      <div class="doc-example">Opponent moves a pawn, uncovering a bishop that now attacks your queen across the board.</div>
+    </div>
+
+    <div class="doc-card">
+      <div class="doc-card-name">Forcing Check</div>
+      <div class="doc-card-def">The best move was to give check, forcing the opponent into a specific response, but you missed it and played something else instead.</div>
+      <div class="doc-example">Stockfish's best move was Qh5+ (check), which would have won material. You played a quiet move instead, missing the opportunity.</div>
+    </div>
+
+    <div class="doc-card">
+      <div class="doc-card-name">Promotion</div>
+      <div class="doc-card-def">You missed a move that would have promoted a pawn to a queen (or other piece), or you underestimated a promotion threat from your opponent.</div>
+      <div class="doc-example">Your pawn was one square away from queening. Instead of advancing it, you played elsewhere — and lost the chance to promote.</div>
+    </div>
+
+    <div class="doc-card">
+      <div class="doc-card-name">Checkmate Threat</div>
+      <div class="doc-card-def">You missed that the opponent had a checkmate threat, or you failed to play a move that would have delivered checkmate or set up an unavoidable mating net.</div>
+      <div class="doc-example">Stockfish shows Qg7# (checkmate in one). You played a different move and the moment was lost.</div>
+    </div>
+
+    <div class="doc-card">
+      <div class="doc-card-name">Positional</div>
+      <div class="doc-card-def">The blunder doesn't fit a specific tactical pattern — it was a strategic or positional mistake such as weakening your king, trading pieces unfavourably, or mishandling pawn structure.</div>
+      <div class="doc-example">You exchanged your good bishop for the opponent's bad bishop, weakening your position long-term. No single tactic caused the loss — it was a strategic misjudgement.</div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ── 4. Opening Metrics ─────────────────────────────────────────────────── -->
+<div class="doc-section" id="doc-openings">
+  <div class="doc-section-title">♟️ Opening Metrics</div>
+  <div class="doc-grid">
+
+    <div class="doc-card">
+      <div class="doc-card-name">Opening Name &amp; ECO Code</div>
+      <div class="doc-card-def">The name and classification code (from the Encyclopaedia of Chess Openings) of the opening you played. These are read directly from the tags Chess.com attaches to each game's PGN file.</div>
+      <div class="doc-example">ECO "B13" → Caro-Kann Defence, Exchange Variation. Each letter+number combination uniquely identifies an opening line.</div>
+      <div class="doc-source"><span>Chess.com API</span></div>
+    </div>
+
+    <div class="doc-card">
+      <div class="doc-card-name">Theory Depth</div>
+      <div class="doc-card-def">The number of moves (half-moves / plies) that are considered "book" theory in this opening, according to the Chess.com opening classification URL. Moves up to this depth are shown in blue on the opening board; moves after it are in orange (your own continuation).</div>
+      <div class="doc-formula">Extracted from the Chess.com ECOUrl tag in the PGN — e.g. "…-with-1-e4-c5-2.Nf3-3.d4" → 3 moves of theory</div>
+      <div class="doc-example">The Sicilian Dragon has 7 moves of established theory. If you deviated on move 4, the board shows moves 1–7 in blue and your move 4 in orange.</div>
+      <div class="doc-source"><span>Chess.com API</span></div>
+    </div>
+
+    <div class="doc-card">
+      <div class="doc-card-name">Win % by Opening</div>
+      <div class="doc-card-def">Your win rate specifically within a given opening, letting you identify which openings you perform best and worst in.</div>
+      <div class="doc-formula">Opening Win % = (Wins in this opening ÷ Games played in this opening) × 100</div>
+      <div class="doc-example">You played the Caro-Kann 20 times, winning 12 → Win % = 60%. Across all openings your win rate is 50%, so Caro-Kann is above average for you.</div>
+      <div class="doc-source"><span>Chess.com API + Stockfish</span></div>
+    </div>
+
+    <div class="doc-card">
+      <div class="doc-card-name">Avg Accuracy by Opening</div>
+      <div class="doc-card-def">Your average Stockfish accuracy score for games played in a specific opening. Comparing this to your global average reveals openings where you play more or less precisely.</div>
+      <div class="doc-formula">Mean of accuracy scores across all games in that opening</div>
+      <div class="doc-example">Your global average accuracy is 83%. In the London System your average is 88% → you play it more confidently than your other openings.</div>
+      <div class="doc-source"><span>Stockfish engine</span></div>
+    </div>
+
+    <div class="doc-card">
+      <div class="doc-card-name">Avg Theory Depth (opening table)</div>
+      <div class="doc-card-def">Across all your games in a given opening, the average number of moves that fell within known book theory before you deviated. A higher number means you tend to follow established lines longer.</div>
+      <div class="doc-formula">Mean of theory_depth across all games in that opening</div>
+      <div class="doc-example">In 10 Ruy Lopez games you deviated from theory on moves 4, 5, 6, 4, 7, 5, 4, 6, 5, 5. Average = 5.1 moves of theory followed.</div>
+      <div class="doc-source"><span>Chess.com API</span></div>
+    </div>
+
+    <div class="doc-card">
+      <div class="doc-card-name">Avg First Error Move (by opening)</div>
+      <div class="doc-card-def">On average, at which move number do you make your first blunder when playing a particular opening? Helps identify openings where you lose the thread early.</div>
+      <div class="doc-formula">Mean of the first-blunder move number across all games in that opening where a blunder occurred</div>
+      <div class="doc-example">In the King's Indian you consistently blunder around move 14, vs. move 22 in the Slav — suggesting you are less comfortable in the King's Indian middlegame.</div>
+      <div class="doc-source"><span>Stockfish engine</span></div>
+    </div>
+
+    <div class="doc-card">
+      <div class="doc-card-name">Top Blunder Type (by opening)</div>
+      <div class="doc-card-def">The most frequently missed tactic across all blunders made in a given opening. Tells you the specific weakness that opening tends to expose in your play.</div>
+      <div class="doc-formula">Mode of tactic_type among all blunders in that opening</div>
+      <div class="doc-example">In the French Defence, 7 of your 11 blunders are "Hanging Piece" → you need to be more careful about undefended pieces in this structure.</div>
+      <div class="doc-source"><span>Stockfish engine</span></div>
+    </div>
+
+    <div class="doc-card">
+      <div class="doc-card-name">Avg Game Length (by opening)</div>
+      <div class="doc-card-def">The average total number of moves (both players combined) in games where this opening was played. Some openings lead to quick tactical games; others to long positional battles.</div>
+      <div class="doc-formula">Mean of total move counts across all games in that opening</div>
+      <div class="doc-example">Your King's Gambit games last an average of 28 moves; your Queen's Gambit Declined games average 52 moves.</div>
+      <div class="doc-source"><span>Chess.com API</span></div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ── 5. Opponent Metrics ─────────────────────────────────────────────────── -->
+<div class="doc-section" id="doc-opponent">
+  <div class="doc-section-title">👤 Opponent Metrics</div>
+  <div class="doc-grid">
+
+    <div class="doc-card">
+      <div class="doc-card-name">Opponent ELO</div>
+      <div class="doc-card-def">The Elo rating of your opponent at the time the game was played. Elo is a number that represents playing strength — a higher number means a stronger player. It is shown in the Games table so you can see which results came against stronger or weaker opposition.</div>
+      <div class="doc-example">A win against a 1600-rated opponent is more meaningful than a win against a 900-rated player, even if both count as one win.</div>
+      <div class="doc-source"><span>Chess.com API</span></div>
+    </div>
+
+    <div class="doc-card">
+      <div class="doc-card-name">Opponent Blunders / Game</div>
+      <div class="doc-card-def">The average number of blunder-level mistakes your opponents made per game. Stockfish analyses both sides of every game. A high opponent blunder rate can explain wins that were gifted rather than earned.</div>
+      <div class="doc-formula">Opponent Blunders/Game = Total opponent blunders ÷ Number of games</div>
+      <div class="doc-example">If opponents averaged 3.0 blunders/game while you averaged 1.5, many of your wins may have come from opponent errors rather than superior play.</div>
+      <div class="doc-source"><span>Stockfish engine</span></div>
+    </div>
+
+    <div class="doc-card">
+      <div class="doc-card-name">Opponent Mistakes &amp; Inaccuracies</div>
+      <div class="doc-card-def">Same as your own mistake and inaccuracy counts, but calculated for the opponent's moves. Shown in the Move Quality table alongside your own figures for direct comparison.</div>
+      <div class="doc-formula">Same thresholds: mistakes &gt;80 cp, inaccuracies &gt;40 cp — applied to opponent moves</div>
+      <div class="doc-example">If your opponents average 1.2 mistakes/game and you average 2.1, you are making proportionally more mistakes than your opponents at your current level.</div>
+      <div class="doc-source"><span>Stockfish engine</span></div>
+    </div>
+
+    <div class="doc-card">
+      <div class="doc-card-name">% Games Ended by Checkmate</div>
+      <div class="doc-card-def">The proportion of games that ended with checkmate (rather than resignation or time forfeit). Shown in the Openings tab error section to reveal how often games in a given opening reach a forced conclusion.</div>
+      <div class="doc-formula">(Games with termination = "checkmate" ÷ Total games in opening) × 100</div>
+      <div class="doc-example">In your King's Gambit games, 40% end by checkmate — meaning tactical, decisive games. In the Queen's Gambit Declined, only 5% end by checkmate.</div>
+      <div class="doc-source"><span>Chess.com API</span></div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ── 6. Pattern Analysis Metrics ───────────────────────────────────────── -->
+<div class="doc-section" id="doc-patterns">
+  <div class="doc-section-title">⚡ Pattern Analysis Metrics</div>
+
+  <div class="doc-card" style="margin-bottom:16px">
+    <div class="doc-card-def">
+      The ⚡ Patterns tab identifies <strong>recurring mistakes</strong> — situations where you made
+      the same bad move (same UCI move code) in the same opening, across two or more different games.
+      These are your <em>true blind spots</em>: not random errors, but systematic habits that cost you
+      material repeatedly.
+    </div>
+  </div>
+
+  <div class="doc-grid">
+
+    <div class="doc-card">
+      <div class="doc-card-name">Recurring Patterns (count)</div>
+      <div class="doc-card-def">The total number of distinct (opening + bad move) combinations that appeared in at least 2 different games. Each unique pattern represents a habit worth fixing.</div>
+      <div class="doc-formula">Count of unique (opening_name, bad_move_uci) pairs with occurrence count ≥ 2</div>
+      <div class="doc-example">If you played e5 as a bad move in the London System 3 times and castled prematurely in the Caro-Kann twice, that is 2 distinct patterns.</div>
+      <div class="doc-source"><span>Stockfish engine + Chess.com API</span></div>
+    </div>
+
+    <div class="doc-card">
+      <div class="doc-card-name">Total Occurrences</div>
+      <div class="doc-card-def">The sum of all times a recurring pattern was triggered across your games. If you have 5 patterns that happened 2, 3, 2, 4, and 2 times respectively, the total is 13 occurrences.</div>
+      <div class="doc-formula">Total Occurrences = sum of (count) for each pattern</div>
+      <div class="doc-example">12 patterns × average 2.5 occurrences each = 30 total occurrences of recurring mistakes.</div>
+      <div class="doc-source"><span>Stockfish engine</span></div>
+    </div>
+
+    <div class="doc-card">
+      <div class="doc-card-name">Avg CP Loss / Pattern</div>
+      <div class="doc-card-def">The average centipawn loss per pattern, averaged across all patterns. Patterns with higher CP loss are more costly and should be prioritised.</div>
+      <div class="doc-formula">Avg CP Loss / Pattern = mean of (avg_cp_loss) across all recurring patterns</div>
+      <div class="doc-example">Pattern A costs −200 cp on average, pattern B costs −100 cp. Avg CP Loss = (200 + 100) ÷ 2 = 150 cp per pattern.</div>
+      <div class="doc-source"><span>Stockfish engine</span></div>
+    </div>
+
+    <div class="doc-card">
+      <div class="doc-card-name">Pattern Occurrence Count (×N)</div>
+      <div class="doc-card-def">The number shown on each pattern card (e.g. "3×") is how many times you played that specific bad move in that specific opening across all your games.</div>
+      <div class="doc-example">"5×" on a pattern card means you played that exact mistake in that opening five separate times across five different games.</div>
+      <div class="doc-source"><span>Stockfish engine</span></div>
+    </div>
+
+    <div class="doc-card">
+      <div class="doc-card-name">Pattern Avg CP Loss (−N cp)</div>
+      <div class="doc-card-def">For each individual pattern, the average centipawn loss each time you made that specific mistake. It is the mean of the Stockfish-measured loss across all occurrences of that pattern.</div>
+      <div class="doc-formula">Avg CP Loss for pattern = sum of CP Loss across all occurrences ÷ number of occurrences</div>
+      <div class="doc-example">You played Nf6 badly 3 times in the Caro-Kann, losing 120 cp, 180 cp, and 150 cp each time. Avg CP Loss = (120+180+150) ÷ 3 = 150 cp.</div>
+      <div class="doc-source"><span>Stockfish engine</span></div>
+    </div>
+
+    <div class="doc-card">
+      <div class="doc-card-name">Your Move (✗) vs Best Move (✓)</div>
+      <div class="doc-card-def">Each pattern card shows the move you repeatedly played (in red, marked ✗) and the move Stockfish considers best in that position (in green, marked ✓). The arrows on the mini board visually show both moves.</div>
+      <div class="doc-formula">Your move = the bad UCI move you played most often in this pattern<br>Best move = the most common Stockfish recommendation across all occurrences</div>
+      <div class="doc-example">✗ e5 (your move, costs −200 cp) → ✓ dxe4 (Stockfish best, would have maintained equality)</div>
+      <div class="doc-source"><span>Stockfish engine</span></div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ── 7. Critical Patterns ───────────────────────────────────────────────── -->
+<div class="doc-section" id="doc-critical">
+  <div class="doc-section-title">🔍 Critical Patterns (Dashboard)</div>
+  <div class="doc-grid">
+
+    <div class="doc-card">
+      <div class="doc-card-name">Games Lost After Exactly 1 Blunder</div>
+      <div class="doc-card-def">The percentage of your losses that occurred in games where you made only one blunder. This reveals how often a single mistake is decisive — i.e. you were otherwise playing well but one error cost you the game.</div>
+      <div class="doc-formula">(Games where blunders = 1 AND outcome = loss) ÷ Total games × 100</div>
+      <div class="doc-example">Out of 100 games, 15 were losses where you made exactly 1 blunder → 15%. This suggests that eliminating just one blunder type could save many games.</div>
+      <div class="doc-source"><span>Stockfish engine + Chess.com API</span></div>
+    </div>
+
+    <div class="doc-card">
+      <div class="doc-card-name">Winning Positions Converted</div>
+      <div class="doc-card-def">Among games where you held a clearly winning advantage at some point (Stockfish evaluation ≥ +200 cp in your favour), the percentage you actually went on to win. A low score means you struggle to convert advantages.</div>
+      <div class="doc-formula">(Games won where you had a +200 cp advantage at some point) ÷ (Games where you had a +200 cp advantage) × 100</div>
+      <div class="doc-example">In 20 games you reached a +200 cp winning position. You converted 14 of them → Conversion rate = 70%.</div>
+      <div class="doc-source"><span>Stockfish engine</span></div>
+    </div>
+
+    <div class="doc-card">
+      <div class="doc-card-name">Blunders with King Unsafe</div>
+      <div class="doc-card-def">The percentage of your blunders that happened when your king was in a vulnerable position (not fully castled and sheltered). Highlights whether king safety issues contribute to your errors.</div>
+      <div class="doc-formula">(Blunders where king_unsafe = true) ÷ Total blunders × 100</div>
+      <div class="doc-example">30 of your 80 blunders happened when your king was exposed → 37.5%. Prioritising king safety could reduce your blunder rate significantly.</div>
+      <div class="doc-source"><span>Stockfish engine</span></div>
+    </div>
+
+    <div class="doc-card">
+      <div class="doc-card-name">Win Rate Trend (by opening)</div>
+      <div class="doc-card-def">A chronological chart of your results in a specific opening, showing how your win/loss record evolves over time. An upward trend means you are improving in that opening; a flat or downward trend means you have stagnated.</div>
+      <div class="doc-formula">For each game (sorted by date): 1 = Win, 0 = Loss/Draw. Plotted as a line chart.</div>
+      <div class="doc-example">Your last 10 Sicilian games: L, L, W, L, W, W, W, W, W, W → clear improvement trend over time.</div>
+      <div class="doc-source"><span>Chess.com API + Stockfish</span></div>
+    </div>
+
+  </div>
+</div>
+
+</div>
+</div><!-- /page-docs -->
 
 <script>
 // \u2500\u2500 Injected data \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
