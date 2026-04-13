@@ -161,6 +161,40 @@ select { background: #0f3460; color: #e0e0e0; border: 1px solid #00b894; border-
 .view-btn { background: transparent; border: 1px solid #00b894; color: #00b894;
             border-radius: 4px; padding: 3px 9px; cursor: pointer; font-size: 0.78rem; }
 .view-btn:hover { background: #00b894; color: #1a1a2e; }
+
+/* ── Pattern Analysis tab ───────────────────────────────────────────────────── */
+.pat-grid { display: flex; flex-direction: column; gap: 36px; }
+.pat-opening-group { margin-bottom: 4px; }
+.pat-opening-name, .pat-opening-title {
+  font-size: 1rem; font-weight: 700; color: #ffffff;
+  background: #0d1b38; border-left: 4px solid #00b894;
+  padding: 8px 16px; border-radius: 0 6px 6px 0; margin: 0 0 14px 0;
+  display: inline-flex; align-items: center; }
+.pat-cards-row, .pat-cards { display: flex; flex-wrap: wrap; gap: 16px; }
+.pat-card { background: #16213e; border: 1px solid #0f3460; border-radius: 12px;
+  padding: 16px; display: flex; flex-direction: column; gap: 12px;
+  width: 340px; flex-shrink: 0;
+  transition: border-color .15s; }
+.pat-card:hover { border-color: #00b894; }
+.pat-header { display: flex; align-items: center; justify-content: space-between; }
+.pat-chip { padding: 4px 12px; border-radius: 12px; font-size: 0.82rem; font-weight: 700;
+  background: #e1705522; color: #e17055; border: 1px solid #e1705555; }
+.pat-cp-loss { font-size: 0.82rem; font-weight: 600; color: #ff6b6b;
+  background: #d6303118; border: 1px solid #d6303140; border-radius: 8px; padding: 3px 10px; }
+.pat-board-wrap { position: relative; width: 320px; height: 320px; }
+.pat-board { display: grid; grid-template-columns: repeat(8, 40px);
+  border: 2px solid #0f3460; border-radius: 3px; overflow: hidden; width: 320px; height: 320px; }
+.pat-sq { width: 40px; height: 40px; display: flex; align-items: center;
+  justify-content: center; font-size: 26px; line-height: 1; }
+.pat-arrows { position: absolute; top: 2px; left: 2px; width: 316px; height: 316px;
+  pointer-events: none; overflow: visible; }
+.pat-moves { display: flex; flex-direction: column; gap: 7px; }
+.pat-move { display: flex; align-items: center; gap: 10px; padding: 8px 12px;
+  border-radius: 7px; font-size: 0.88rem; font-weight: 600; }
+.pat-move.bad  { background: #d6303120; border: 1px solid #d6303150; color: #ff6b6b; }
+.pat-move.good { background: #00b89420; border: 1px solid #00b89450; color: #00b894; }
+.pat-empty { color: #a0a0c0; text-align: center; padding: 60px 20px;
+  font-size: 0.95rem; background: #16213e; border-radius: 10px; border: 1px solid #0f3460; }
 """
 
 # ── Chart.js CDN ──────────────────────────────────────────────────────────────
@@ -941,6 +975,87 @@ def _build_dashboard(df: pd.DataFrame, opening_df: pd.DataFrame, username: str) 
         }
     opening_moves_js = json.dumps(opening_moves_map)
 
+    # ── Recurring mistake pattern analysis ────────────────────────────────────
+    # Groups blunders/mistakes by (opening, move_played_uci) across all games.
+    # The same bad UCI move in the same opening = a recurring pattern.
+    # Uses board_states from the DataFrame — no Stockfish re-analysis needed.
+    from collections import defaultdict as _dd, Counter as _Ctr
+    _MIN_PATTERN_OCC = 2
+
+    _pat_groups: dict = _dd(list)
+    for _, _row in df.iterrows():
+        _opening   = str(_row.get("opening_name", "") or "Unknown Opening")
+        _eco       = str(_row.get("eco", "?") or "?")
+        _bstates   = _row.get("board_states", []) or []
+        _pcolor    = str(_row.get("player_color", "white") or "white")
+        _cat       = str(_row.get("category", "") or "")
+        _date      = str(_row.get("date", "") or "")
+
+        for _err in (_row.get("errors") or []):
+            if _err.get("classification") not in ("blunder", "mistake"):
+                continue
+            _muci = _err.get("move_played_uci", "")
+            if not _muci:
+                continue
+            # Recover board position for FEN snapshot
+            _mn  = _err.get("move_number", 0)
+            _ply = (_mn - 1) * 2 + (0 if _pcolor == "white" else 1)
+            _fen_full = _bstates[_ply].fen() if (0 <= _ply < len(_bstates)) else ""
+            _pat_groups[(_opening, _muci)].append({
+                "eco":            _eco,
+                "fen_full":       _fen_full,
+                "best_uci":       _err.get("best_move_uci", ""),
+                "move_bad_san":   _err.get("move_played_san", ""),
+                "best_san":       _err.get("best_move_san", ""),
+                "cp_loss":        int(_err.get("cp_loss", 0)),
+                "phase":          _err.get("phase", "middlegame"),
+                "tactic_type":    _err.get("tactic_type", "Positional"),
+                "classification": _err.get("classification", "blunder"),
+                "player_color":   _pcolor,
+                "category":       _cat,
+                "date":           _date,
+            })
+
+    _patterns_list: list[dict] = []
+    for (_opening, _muci), _entries in _pat_groups.items():
+        if len(_entries) < _MIN_PATTERN_OCC:
+            continue
+        _avg_cp   = round(sum(e["cp_loss"] for e in _entries) / len(_entries))
+        _best_uci = _Ctr(e["best_uci"] for e in _entries).most_common(1)[0][0]
+        _best_san = next((e["best_san"] for e in _entries if e["best_uci"] == _best_uci), _best_uci)
+        _top_cls  = _Ctr(e["classification"] for e in _entries).most_common(1)[0][0]
+        _top_ph   = _Ctr(e["phase"] for e in _entries).most_common(1)[0][0]
+        _tactics_valid = [e["tactic_type"] for e in _entries if e["tactic_type"] not in ("N/A", "")]
+        _top_tac  = _Ctr(_tactics_valid).most_common(1)[0][0] if _tactics_valid else "Positional"
+        _top_color = _Ctr(e["player_color"] for e in _entries).most_common(1)[0][0]
+        _top_cat   = _Ctr(e["category"] for e in _entries).most_common(1)[0][0]
+        # Pick the representative FEN (first non-empty)
+        _rep_fen  = next((e["fen_full"] for e in _entries if e["fen_full"]), "")
+        _rep_bsan = next((e["move_bad_san"] for e in _entries if e["move_bad_san"]), _muci)
+        _patterns_list.append({
+            "opening":        _opening,
+            "eco":            _entries[0]["eco"],
+            "fen":            _rep_fen,
+            "move_bad_uci":   _muci,
+            "move_bad_san":   _rep_bsan,
+            "move_good_uci":  _best_uci,
+            "move_good_san":  _best_san,
+            "count":          len(_entries),
+            "avg_cp_loss":    _avg_cp,
+            "classification": _top_cls,
+            "phase":          _top_ph,
+            "tactic_type":    _top_tac,
+            "color":          _top_color,
+            "category":       _top_cat,
+            "occurrences": [
+                {"color": e["player_color"], "category": e["category"], "date": e["date"]}
+                for e in _entries
+            ],
+        })
+
+    _patterns_list.sort(key=lambda p: (-p["count"], -p["avg_cp_loss"]))
+    patterns_js = json.dumps({"patterns": _patterns_list[:80]})
+
     # ── Games list (links) ────────────────────────────────────────────────────
     game_rows = []
     for i, (_, row) in enumerate(df.iterrows(), 1):
@@ -1134,6 +1249,7 @@ def _build_dashboard(df: pd.DataFrame, opening_df: pd.DataFrame, username: str) 
   <button class="ptab" id="ptab-dashboard" onclick="showPage('dashboard')">Dashboard</button>
   <button class="ptab" id="ptab-openings"  onclick="showPage('openings')">Openings</button>
   <button class="ptab" id="ptab-games"     onclick="showPage('games')">Games</button>
+  <button class="ptab" id="ptab-patterns"  onclick="showPage('patterns')">⚡ Patterns</button>
 </div>
 
 <!-- \u2500\u2500 Global filter bar \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500 -->
@@ -1425,11 +1541,32 @@ def _build_dashboard(df: pd.DataFrame, opening_df: pd.DataFrame, username: str) 
 </div><!-- /container -->
 </div><!-- /page-games -->
 
+<!-- ══════════════════════════════════════════════════════════════════════════
+     PAGE 4: PATTERNS
+     ══════════════════════════════════════════════════════════════════════════ -->
+<div id="page-patterns" class="page-content">
+<div class="container">
+
+<h2>⚡ Recurring Mistakes</h2>
+<p style="color:#a0a0c0;margin-bottom:20px;font-size:0.9rem">
+  Positions where you repeatedly played the same bad move across multiple games.
+  Only patterns occurring in <strong style="color:#ffffff">≥2 games</strong> are shown.
+  <span style="color:#ff6b6b">Red arrow</span> = your move &nbsp;·&nbsp;
+  <span style="color:#00b894">Green arrow</span> = Stockfish best.
+</p>
+
+<div id="patSummaryCards" class="cards" style="margin-bottom:28px"></div>
+<div id="patGrid" class="pat-grid"></div>
+
+</div>
+</div><!-- /page-patterns -->
+
 <script>
 // \u2500\u2500 Injected data \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
 const perGameData      = {per_game_js_data};
 const allOpeningData   = {opening_js_data};
 const openingMovesData = {opening_moves_js};
+const patternsData     = {patterns_js};
 
 // \u2500\u2500 Color constants \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
 const C_WIN='{C_WIN}', C_LOSS='{C_LOSS}', C_DRAW='{C_DRAW}';
@@ -1528,6 +1665,8 @@ function applyFilters() {{
     openingTabUpdate();
   }} else if (_activePage === 'games') {{
     _updateGamesPage(sub);
+  }} else if (_activePage === 'patterns') {{
+    _updatePatternsPage();
   }}
   const el = document.getElementById('gFilterCount');
   if (el) el.textContent = sub.length + ' games';
@@ -2023,6 +2162,171 @@ function _updateGamesPage(sub) {{
   }});
   const cnt = document.getElementById('gamesFilterCount');
   if (cnt) cnt.textContent = vis===rows.length ? `${{rows.length}} games` : `${{vis}} / ${{rows.length}} games`;
+}}
+
+// ── Patterns tab functions ────────────────────────────────────────────────────
+function _updatePatternsPage() {{
+  const col = _filterColor;
+  const cat = _filterCat;
+  let patterns = (patternsData && patternsData.patterns) ? patternsData.patterns : [];
+  patterns = patterns.filter(p => {{
+    if (col !== 'all' && p.color !== col) return false;
+    if (cat !== 'all' && p.category !== cat) return false;
+    return true;
+  }});
+
+  const totalPatterns = patterns.length;
+  const totalOccurrences = patterns.reduce((s,p) => s + p.count, 0);
+  const avgCpLoss = patterns.length
+    ? (patterns.reduce((s,p) => s + p.avg_cp_loss, 0) / patterns.length).toFixed(0)
+    : 0;
+  const sc = document.getElementById('patSummaryCards');
+  if (sc) sc.innerHTML = `
+    <div class="card orange"><div class="value">${{totalPatterns}}</div><div class="label">Recurring Patterns</div></div>
+    <div class="card red"><div class="value">${{totalOccurrences}}</div><div class="label">Total Occurrences</div></div>
+    <div class="card blue"><div class="value">${{avgCpLoss}}</div><div class="label">Avg CP Loss / Pattern</div></div>
+  `;
+
+  const grid = document.getElementById('patGrid');
+  if (!grid) return;
+  if (!patterns.length) {{
+    grid.innerHTML = '<div style="color:#a0a0c0;padding:40px;text-align:center;">No recurring patterns found for the selected filters.</div>';
+    return;
+  }}
+
+  // Group by opening
+  const byOpening = {{}};
+  for (const p of patterns) {{
+    if (!byOpening[p.opening]) byOpening[p.opening] = [];
+    byOpening[p.opening].push(p);
+  }}
+
+  let html = '';
+  for (const [opening, pats] of Object.entries(byOpening)) {{
+    html += `<div class="pat-opening-group">
+      <h3 class="pat-opening-name">${{opening}}</h3>
+      <div class="pat-cards-row">
+        ${{pats.map(p => _renderPatCard(p)).join('')}}
+      </div>
+    </div>`;
+  }}
+  grid.innerHTML = html;
+
+  // Draw boards after DOM is updated
+  for (const p of patterns) {{
+    const boardId = _patBoardId(p);
+    _drawPatBoard(boardId, p.fen, p.move_bad_uci, p.move_good_uci);
+  }}
+}}
+
+function _patBoardId(p) {{
+  const raw = (p.opening || '').slice(0,12) + (p.move_bad_uci || '') + (p.fen || '').slice(0,8);
+  try {{
+    return 'pb_' + btoa(unescape(encodeURIComponent(raw))).replace(/[^a-zA-Z0-9]/g, '');
+  }} catch(e) {{
+    return 'pb_' + Math.abs(raw.split('').reduce((a,c) => (a*31 + c.charCodeAt(0))|0, 0));
+  }}
+}}
+
+function _renderPatCard(p) {{
+  const bid    = _patBoardId(p);
+  const cpStr  = p.avg_cp_loss >= 9999 ? '##' : Math.round(p.avg_cp_loss);
+  const badSan  = p.move_bad_san  || p.move_bad_uci  || '?';
+  const goodSan = p.move_good_san || p.move_good_uci || '?';
+  return `
+    <div class="pat-card">
+      <div class="pat-header">
+        <span class="pat-chip">${{p.count}}\u00d7</span>
+        <span class="pat-cp-loss" title="Average centipawn loss">\u2212${{cpStr}}\u00a0cp</span>
+      </div>
+      <div class="pat-board-wrap">
+        <div class="pat-board" id="${{bid}}"></div>
+        <svg class="pat-arrows" id="${{bid}}_svg" viewBox="0 0 320 320" xmlns="http://www.w3.org/2000/svg"></svg>
+      </div>
+      <div class="pat-moves">
+        <span class="pat-move bad" title="Your move">\u2717\u00a0${{badSan}}</span>
+        <span class="pat-move good" title="Best move">\u2713\u00a0${{goodSan}}</span>
+      </div>
+    </div>`;
+}}
+
+function _drawPatBoard(boardId, fen, badUCI, goodUCI) {{
+  const board = document.getElementById(boardId);
+  if (!board) return;
+  const SQ = 40;
+  const PIECES = {{
+    'K':'\u2654','Q':'\u2655','R':'\u2656','B':'\u2657','N':'\u2658','P':'\u2659',
+    'k':'\u265a','q':'\u265b','r':'\u265c','b':'\u265d','n':'\u265e','p':'\u265f'
+  }};
+  const LIGHT = '#f0d9b5';
+  const DARK  = '#b58863';
+
+  const badFrom  = badUCI  && badUCI.length  >= 4 ? badUCI.slice(0,2)  : null;
+  const badTo    = badUCI  && badUCI.length  >= 4 ? badUCI.slice(2,4)  : null;
+  const goodFrom = goodUCI && goodUCI.length >= 4 ? goodUCI.slice(0,2) : null;
+  const goodTo   = goodUCI && goodUCI.length >= 4 ? goodUCI.slice(2,4) : null;
+
+  function sqName(file, rank8) {{ return String.fromCharCode(97+file) + (8-rank8); }}
+
+  const ranks = (fen.split(' ')[0] || '').split('/');
+  let html = '';
+  for (let rank=0; rank<8; rank++) {{
+    const rowStr = ranks[rank] || '';
+    let col = 0;
+    for (const ch of rowStr) {{
+      const count = (ch >= '1' && ch <= '8') ? parseInt(ch) : 1;
+      const pieceChar = (ch >= '1' && ch <= '8') ? '' : ch;
+      for (let e=0; e<count; e++) {{
+        const sq = sqName(col, rank);
+        const isLight = (col+rank)%2===0;
+        let bg = isLight ? LIGHT : DARK;
+        if (sq===badTo)    bg = 'rgba(220,50,50,0.70)';
+        if (sq===badFrom)  bg = 'rgba(220,50,50,0.35)';
+        if (sq===goodTo)   bg = 'rgba(46,204,113,0.70)';
+        if (sq===goodFrom) bg = 'rgba(46,204,113,0.35)';
+        const piece = pieceChar ? (PIECES[pieceChar]||'') : '';
+        const pColor = pieceChar && pieceChar===pieceChar.toUpperCase() ? '#fff' : '#111';
+        html += `<div class="pat-sq" style="background:${{bg}};color:${{pColor}}">${{piece}}</div>`;
+        col++;
+      }}
+    }}
+  }}
+  board.innerHTML = html;
+
+  const svg = document.getElementById(boardId+'_svg');
+  if (svg) {{
+    svg.innerHTML = '';
+    if (badUCI  && badUCI.length  >= 4) _patArrow(svg, badUCI.slice(0,2),  badUCI.slice(2,4),  '#e74c3c', SQ);
+    if (goodUCI && goodUCI.length >= 4) _patArrow(svg, goodUCI.slice(0,2), goodUCI.slice(2,4), '#2ecc71', SQ);
+  }}
+}}
+
+function _patArrow(svg, fromAlg, toAlg, color, SQ) {{
+  const fileOf = s => s.charCodeAt(0) - 97;
+  const rankOf = s => 8 - parseInt(s[1]);
+  const cx = s => (fileOf(s) + 0.5) * SQ;
+  const cy = s => (rankOf(s) + 0.5) * SQ;
+  const x1=cx(fromAlg), y1=cy(fromAlg), x2=cx(toAlg), y2=cy(toAlg);
+  const dx=x2-x1, dy=y2-y1;
+  const len = Math.sqrt(dx*dx+dy*dy) || 1;
+  const ux=dx/len, uy=dy/len;
+  const hw=5, hl=12;
+  const ex=x2-ux*hl, ey=y2-uy*hl;
+  const line = document.createElementNS('http://www.w3.org/2000/svg','line');
+  line.setAttribute('x1',x1); line.setAttribute('y1',y1);
+  line.setAttribute('x2',ex); line.setAttribute('y2',ey);
+  line.setAttribute('stroke',color);
+  line.setAttribute('stroke-width','4');
+  line.setAttribute('stroke-opacity','0.85');
+  line.setAttribute('stroke-linecap','round');
+  svg.appendChild(line);
+  const px=-uy*hw, py=ux*hw;
+  const pts=`${{x2}},${{y2}} ${{ex+px}},${{ey+py}} ${{ex-px}},${{ey-py}}`;
+  const tri = document.createElementNS('http://www.w3.org/2000/svg','polygon');
+  tri.setAttribute('points', pts);
+  tri.setAttribute('fill', color);
+  tri.setAttribute('fill-opacity','0.85');
+  svg.appendChild(tri);
 }}
 
 // \u2500\u2500 Keyboard nav for openings board \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
