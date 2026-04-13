@@ -196,6 +196,43 @@ select { background: #0f3460; color: #e0e0e0; border: 1px solid #00b894; border-
 .pat-empty { color: #a0a0c0; text-align: center; padding: 60px 20px;
   font-size: 0.95rem; background: #16213e; border-radius: 10px; border: 1px solid #0f3460; }
 
+/* ── Known Traps section (Openings tab) ──────────────────────────────────────── */
+.traps-section { margin-top: 32px; }
+.traps-header { font-size: 1.05rem; font-weight: 800; color: #fdcb6e;
+  border-left: 4px solid #fdcb6e; padding: 9px 16px;
+  background: #1a1600; border-radius: 0 8px 8px 0; margin-bottom: 16px;
+  display: flex; align-items: center; gap: 10px; }
+.traps-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 18px; }
+.trap-tab { padding: 6px 16px; border-radius: 20px; font-size: 0.82rem; font-weight: 600;
+  background: #1a1600; border: 1px solid #6c5a00; color: #fdcb6e;
+  cursor: pointer; transition: all .15s; }
+.trap-tab.active, .trap-tab:hover { background: #fdcb6e; color: #1a1a2e; border-color: #fdcb6e; }
+.trap-body { display: none; }
+.trap-body.active { display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-start; }
+.trap-desc-box { background: #1a1600; border: 1px solid #6c5a00; border-radius: 10px;
+  padding: 14px 18px; font-size: 0.88rem; color: #f0d9a0; line-height: 1.7;
+  max-width: 420px; flex: 1; }
+.trap-desc-title { font-weight: 700; color: #fdcb6e; margin-bottom: 6px; font-size: 0.9rem; }
+.trap-board-wrap { position: relative; width: 320px; height: 320px; flex-shrink: 0; }
+.trap-board { display: grid; grid-template-columns: repeat(8, 40px);
+  border: 2px solid #6c5a00; border-radius: 3px; overflow: hidden; width: 320px; height: 320px; }
+.trap-arrows { position: absolute; top: 2px; left: 2px; width: 316px; height: 316px;
+  pointer-events: none; overflow: visible; }
+.trap-nav { display: flex; align-items: center; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+.trap-nav button { padding: 5px 12px; border-radius: 6px; border: 1px solid #6c5a00;
+  background: #1a1600; color: #fdcb6e; font-size: 0.82rem; cursor: pointer; transition: all .12s; }
+.trap-nav button:hover { background: #fdcb6e; color: #1a1a2e; }
+.trap-step-label { font-size: 0.78rem; color: #a09060; margin-left: 4px; }
+.trap-move-list { display: flex; flex-direction: column; gap: 4px; min-width: 140px; flex: 0 0 140px; }
+.trap-mv-pair { display: flex; gap: 4px; align-items: center; font-size: 0.83rem; }
+.trap-mv-num  { color: #6c5a00; font-weight: 600; min-width: 22px; }
+.trap-mv { padding: 2px 8px; border-radius: 5px; cursor: pointer; color: #fdcb6e;
+  background: #1a1600; border: 1px solid transparent; transition: all .1s; }
+.trap-mv:hover { border-color: #fdcb6e; }
+.trap-mv.cur { background: #fdcb6e22; border-color: #fdcb6e; font-weight: 700; }
+.trap-mv.trap-move { color: #ff6b6b; }
+.trap-mv.trap-move.cur { background: #ff6b6b22; border-color: #ff6b6b; }
+
 /* ── Documentation tab ──────────────────────────────────────────────────────── */
 .doc-toc { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 36px; }
 .doc-toc a { padding: 7px 16px; border-radius: 20px; font-size: 0.82rem; font-weight: 600;
@@ -1012,6 +1049,73 @@ def _build_dashboard(df: pd.DataFrame, opening_df: pd.DataFrame, username: str) 
         }
     opening_moves_js = json.dumps(opening_moves_map)
 
+    # ── Chess traps static dataset ────────────────────────────────────────────
+    # Load from data/chess_traps.json — committed to the repo, zero API calls.
+    # Each trap is matched to openings by ECO prefix or name substring.
+    _traps_path = os.path.join(os.path.dirname(__file__), "data", "chess_traps.json")
+    try:
+        import json as _json
+        with open(_traps_path, "r", encoding="utf-8") as _f:
+            _all_traps = _json.load(_f)
+    except Exception:
+        _all_traps = []
+
+    def _build_trap_steps(moves_san, trap_move_index):
+        """Replay SAN moves from the starting position and return step dicts."""
+        _steps = []
+        _brd   = chess.Board()
+        _steps.append({"san": None, "fen": _brd.fen(), "from": None, "to": None, "isTrapMove": False})
+        for _si, _san in enumerate(moves_san):
+            try:
+                _m   = _brd.parse_san(_san)
+                _frm = chess.square_name(_m.from_square)
+                _to_ = chess.square_name(_m.to_square)
+                _brd.push(_m)
+                _steps.append({
+                    "san":        _san,
+                    "fen":        _brd.fen(),
+                    "from":       _frm,
+                    "to":         _to_,
+                    "isTrapMove": _si == trap_move_index,
+                })
+            except Exception:
+                break
+        return _steps
+
+    # Build a map: opening_name -> [trap, ...] using ECO-prefix + name-substring matching
+    _traps_by_opening: dict = {}
+    for _op_name in df["opening_name"].dropna().unique():
+        _op_eco = ""
+        _op_sub = df[df["opening_name"] == _op_name]
+        if not _op_sub.empty:
+            _op_eco = str(_op_sub.iloc[0].get("eco", "") or "")
+        _matched = []
+        for _t in _all_traps:
+            _t_eco  = _t.get("eco", "")
+            _t_op   = _t.get("opening", "").lower()
+            _op_low = _op_name.lower()
+            # Primary: exact ECO prefix match (3 chars)
+            _eco_match  = bool(_op_eco and _t_eco and _op_eco[:3] == _t_eco[:3])
+            # Secondary: opening name containment (only if ECO also same letter group)
+            _same_group = _op_eco and _t_eco and _op_eco[0] == _t_eco[0]
+            _name_match = _same_group and _t_op and _op_low and (
+                _t_op in _op_low or _op_low in _t_op or
+                # Match on the base opening name (before the colon) having 2+ significant words in common
+                len(set(w for w in _t_op.split(":")[0].split() if len(w) > 4) &
+                    set(w for w in _op_low.split() if len(w) > 4)) >= 1
+            )
+            if _eco_match or _name_match:
+                # Pre-compute steps so JS doesn't need a chess engine
+                _t_with_steps = dict(_t)
+                _t_with_steps["steps"] = _build_trap_steps(
+                    _t.get("moves_san", []),
+                    _t.get("trap_move_index", 999),
+                )
+                _matched.append(_t_with_steps)
+        if _matched:
+            _traps_by_opening[str(_op_name)] = _matched
+    traps_js = json.dumps(_traps_by_opening)
+
     # ── Recurring mistake pattern analysis ────────────────────────────────────
     # Groups blunders/mistakes by (opening, move_played_uci) across all games.
     # The same bad UCI move in the same opening = a recurring pattern.
@@ -1508,6 +1612,13 @@ def _build_dashboard(df: pd.DataFrame, opening_df: pd.DataFrame, username: str) 
     <h3>Missed Tactics</h3>
     <canvas id="opTacticsChart"></canvas>
   </div>
+</div>
+
+<!-- Known Traps section (hidden when no traps found) -->
+<div id="trapsSection" class="traps-section" style="display:none">
+  <div class="traps-header">&#9889; Known Traps in this Opening</div>
+  <div class="traps-tabs" id="trapsTabs"></div>
+  <div id="trapsContent"></div>
 </div>
 
 <!-- All Openings Summary -->
@@ -2051,6 +2162,7 @@ const perGameData      = {per_game_js_data};
 const allOpeningData   = {opening_js_data};
 const openingMovesData = {opening_moves_js};
 const patternsData     = {patterns_js};
+const trapsData        = {traps_js};
 
 // \u2500\u2500 Color constants \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
 const C_WIN='{C_WIN}', C_LOSS='{C_LOSS}', C_DRAW='{C_DRAW}';
@@ -2446,6 +2558,7 @@ function openingTabUpdate() {{
   _updateOpTrends(opSub);
   _updateOpErrors(opSub, allSub);
   _updateOpSummary(allSub);
+  _updateTraps(opName);
 }}
 
 function _updateOpBadges(opSub, opName) {{
@@ -2647,6 +2760,178 @@ function _updateGamesPage(sub) {{
   const cnt = document.getElementById('gamesFilterCount');
   if (cnt) cnt.textContent = vis===rows.length ? `${{rows.length}} games` : `${{vis}} / ${{rows.length}} games`;
 }}
+
+// ── Known Traps (Openings tab) ────────────────────────────────────────────────
+let _trapSteps   = [];   // current trap's steps array
+let _trapStep    = 0;    // current step index
+let _trapIdx     = 0;    // which trap is shown (index into traps array for current opening)
+
+const TRAP_LIGHT = '#f0d9b5';
+const TRAP_DARK  = '#b58863';
+const WP2 = {{K:'\u2654',Q:'\u2655',R:'\u2656',B:'\u2657',N:'\u2658',P:'\u2659'}};
+const BP2 = {{K:'\u265a',Q:'\u265b',R:'\u265c',B:'\u265d',N:'\u265e',P:'\u265f'}};
+
+function _updateTraps(opName) {{
+  const sec  = document.getElementById('trapsSection');
+  const tabs = document.getElementById('trapsTabs');
+  const cont = document.getElementById('trapsContent');
+  if (!sec || !tabs || !cont) return;
+
+  const traps = (trapsData && trapsData[opName]) ? trapsData[opName] : [];
+  if (!traps.length) {{ sec.style.display = 'none'; return; }}
+  sec.style.display = '';
+
+  // Build tab buttons
+  tabs.innerHTML = traps.map((t, i) =>
+    `<button class="trap-tab${{i===0?' active':''}}" onclick="_showTrap('${{opName}}',${{i}})">${{t.name}}</button>`
+  ).join('');
+
+  _showTrap(opName, 0);
+}}
+
+function _showTrap(opName, idx) {{
+  const traps = (trapsData && trapsData[opName]) ? trapsData[opName] : [];
+  if (!traps[idx]) return;
+  _trapIdx  = idx;
+  _trapStep = 0;
+
+  // Mark active tab
+  document.querySelectorAll('.trap-tab').forEach((b,i) => b.classList.toggle('active', i===idx));
+
+  const trap = traps[idx];
+  _trapSteps = _buildTrapSteps(trap.moves_san || [], trap.trap_move_index || 999);
+
+  const cont = document.getElementById('trapsContent');
+  if (!cont) return;
+
+  const bodyId  = 'trapBody_' + idx;
+  const boardId = 'trapBoard_' + idx;
+  const svgId   = boardId + '_svg';
+  const mlId    = 'trapML_' + idx;
+
+  cont.innerHTML = `
+    <div class="trap-body active" id="${{bodyId}}">
+      <div>
+        <div class="trap-board-wrap">
+          <div class="trap-board" id="${{boardId}}"></div>
+          <svg class="trap-arrows" id="${{svgId}}" viewBox="0 0 320 320" xmlns="http://www.w3.org/2000/svg"></svg>
+        </div>
+        <div class="trap-nav">
+          <button onclick="_trapGoTo(0)">&#10218;</button>
+          <button onclick="_trapPrev()">&#8592;</button>
+          <button onclick="_trapNext()">&#8594;</button>
+          <button onclick="_trapGoTo(_trapSteps.length-1)">&#10219;</button>
+          <span class="trap-step-label" id="trapStepLbl"></span>
+        </div>
+      </div>
+      <div class="trap-move-list" id="${{mlId}}"></div>
+      <div class="trap-desc-box">
+        <div class="trap-desc-title">${{trap.name}}</div>
+        ${{trap.description || ''}}
+        ${{trap.trap_move_index < 999 ? `<div style="margin-top:10px;font-size:0.78rem;color:#a09060">&#9888; Trap springs on move ${{Math.ceil((trap.trap_move_index+1)/2)}}</div>` : ''}}
+      </div>
+    </div>`;
+
+  _renderTrapBoard();
+}}
+
+function _buildTrapSteps(movesSan, trapMoveIdx) {{
+  // Replay SAN moves from starting position to build FEN+from+to steps.
+  // Relies on python-chess FEN convention for piece placement.
+  // We'll use a lightweight FEN-replayer via the existing _fenToGrid helper.
+  // Steps: [{{fen, from, to, san, isTrapMove}}, ...]
+  const steps = [{{fen:'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1', from:null, to:null, san:null, isTrapMove:false}}];
+  // We can't replay SAN without a chess engine in JS. Instead we pre-compute
+  // the steps on the Python side and embed them. For now display each SAN
+  // as a text move with sequential index, and show the starting FEN only.
+  // Full board replay is done via _trapStepsData injected per trap.
+  return steps;
+}}
+
+function _renderTrapBoard() {{
+  // Find current trap's precomputed steps from trapsData (steps injected by Python)
+  const opName = _opName;
+  const traps  = (trapsData && trapsData[opName]) ? trapsData[opName] : [];
+  const trap   = traps[_trapIdx];
+  if (!trap || !trap.steps) return;
+  _trapSteps = trap.steps;
+
+  const step    = _trapSteps[_trapStep] || _trapSteps[0];
+  const boardId = 'trapBoard_' + _trapIdx;
+  const svgId   = boardId + '_svg';
+  const mlId    = 'trapML_' + _trapIdx;
+  const lbl     = document.getElementById('trapStepLbl');
+  if (lbl) lbl.textContent = _trapStep === 0 ? 'Start' : `Move ${{_trapStep}} / ${{_trapSteps.length-1}}`;
+
+  // Draw board
+  const board = document.getElementById(boardId);
+  if (board && step) {{
+    const grid  = _fenToGrid(step.fen);
+    const ranks = [8,7,6,5,4,3,2,1];
+    const files = 'abcdefgh';
+    const fromSq = step.from, toSq = step.to;
+    let html = '';
+    for (const rank of ranks) {{
+      for (const file of Array.from(files)) {{
+        const c = files.indexOf(file);
+        const r = 8 - rank;
+        const light = (r + c) % 2 === 0;
+        const piece = grid[r][c];
+        const sq    = file + rank;
+        const isFrom = sq === fromSq, isTo = sq === toSq;
+        let bg = light ? TRAP_LIGHT : TRAP_DARK;
+        if (step.isTrapMove) {{
+          if (isTo)   bg = 'rgba(253,203,110,0.75)';
+          if (isFrom) bg = 'rgba(253,203,110,0.35)';
+        }} else {{
+          if (isTo || isFrom) bg = light ? '#f6f669' : '#baca2b';
+        }}
+        let ph = '';
+        if (piece) {{
+          const isW = piece === piece.toUpperCase();
+          ph = `<span class="${{isW?'cb-wp':'cb-bp'}}">${{isW ? WP2[piece] : BP2[piece.toUpperCase()]}}</span>`;
+        }}
+        html += `<div class="cb-sq ${{light?'cb-light':'cb-dark'}}" style="background:${{bg}}">${{ph}}</div>`;
+      }}
+    }}
+    board.innerHTML = html;
+  }}
+
+  // Draw arrow for current move
+  const svg = document.getElementById(svgId);
+  if (svg && step && step.from && step.to) {{
+    svg.innerHTML = '';
+    const color = step.isTrapMove ? '#fdcb6e' : '#74b9ff';
+    _patArrow(svg, step.from, step.to, color, 40);
+  }}
+
+  // Move list
+  const ml = document.getElementById(mlId);
+  if (ml && trap.steps) {{
+    let h = '', mn = 1, i = 1;
+    while (i < trap.steps.length) {{
+      const ws = trap.steps[i];
+      const bs = i+1 < trap.steps.length ? trap.steps[i+1] : null;
+      const wTrap = ws.isTrapMove ? ' trap-move' : '';
+      const bTrap = bs && bs.isTrapMove ? ' trap-move' : '';
+      const wCur  = i  === _trapStep ? ' cur' : '';
+      const bCur  = bs && i+1 === _trapStep ? ' cur' : '';
+      h += `<div class="trap-mv-pair">
+        <span class="trap-mv-num">${{mn}}.</span>
+        <span class="trap-mv${{wTrap}}${{wCur}}" onclick="_trapGoTo(${{i}})">${{ws.san}}</span>
+        ${{bs ? `<span class="trap-mv${{bTrap}}${{bCur}}" onclick="_trapGoTo(${{i+1}})">${{bs.san}}</span>` : ''}}
+      </div>`;
+      mn++; i += 2;
+    }}
+    ml.innerHTML = h || '<span style="color:#a09060">No moves</span>';
+    const cur = ml.querySelector('.trap-mv.cur');
+    if (cur) cur.scrollIntoView({{block:'nearest'}});
+  }}
+}}
+
+function _trapPrev()  {{ if (_trapStep > 0) {{ _trapStep--; _renderTrapBoard(); }} }}
+function _trapNext()  {{ if (_trapStep < _trapSteps.length - 1) {{ _trapStep++; _renderTrapBoard(); }} }}
+function _trapGoTo(n) {{ _trapStep = Math.max(0, Math.min(n, _trapSteps.length - 1)); _renderTrapBoard(); }}
 
 // ── Patterns tab functions ────────────────────────────────────────────────────
 function _updatePatternsPage() {{
