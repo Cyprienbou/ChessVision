@@ -2166,12 +2166,12 @@ function _updateGamesPage(sub) {{
 
 // ── Patterns tab functions ────────────────────────────────────────────────────
 function _updatePatternsPage() {{
-  const col = _filterColor;
-  const cat = _filterCat;
+  const col = (document.getElementById('gColorFilter')    || {{}}).value || '';
+  const cat = (document.getElementById('gCategoryFilter') || {{}}).value || '';
   let patterns = (patternsData && patternsData.patterns) ? patternsData.patterns : [];
   patterns = patterns.filter(p => {{
-    if (col !== 'all' && p.color !== col) return false;
-    if (cat !== 'all' && p.category !== cat) return false;
+    if (col && p.color    !== col) return false;
+    if (cat && p.category !== cat) return false;
     return true;
   }});
 
