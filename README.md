@@ -11,10 +11,11 @@ An interactive chess game analysis dashboard powered by Stockfish. Fetches your 
 - **Fetches games automatically** from the Chess.com public API (no API key needed)
 - **Deep Stockfish analysis** at configurable depth (default: depth 15)
 - **Smart caching** — each game is analysed once and cached locally; re-runs are instant
-- **3-tab dashboard**:
+- **4-tab dashboard**:
   - **Dashboard** — accuracy, blunder/mistake/inaccuracy breakdown, error phases, critical patterns
   - **Openings** — interactive chess board with book theory vs your game continuation, per-opening stats
   - **Games** — filterable game list with opponent ELO, accuracy, and blunder count
+  - **⚡ Patterns** — recurring mistake analysis: positions where you played the same bad move across ≥2 games, grouped by opening, with mini chess boards showing your move (red arrow) vs Stockfish best (green arrow)
 - **Dynamic filters** — filter all charts and tables by Color (White/Black) and Game Type (Bullet/Blitz/Rapid)
 - **Tactic classification** — identifies Hanging piece, Fork, Pin, Skewer, Discovered attack, Forcing check, Promotion, Checkmate threat, and Positional errors
 
