@@ -1,0 +1,54 @@
+# ── Python ────────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+
+# ── Virtual environments ──────────────────────────────────────────────────────
+.venv/
+venv/
+env/
+ENV/
+
+# ── Environment / secrets ─────────────────────────────────────────────────────
+.env
+.env.*
+*.key
+secrets.json
+
+# ── ChessVision — generated output (do not version) ──────────────────────────
+# The cache contains your personal game analysis; regenerate with main.py
+chess_analyzer/output/analysis_cache.pkl
+
+# Generated HTML reports (rebuilt on every run)
+chess_analyzer/output/dashboard.html
+chess_analyzer/output/games/
+
+# PGN is your personal game data — exclude from public repos
+# Remove this line if you want to version your games file
+chess_analyzer/output/mes_parties.pgn
+
+# Keep the output/ directory itself tracked (via .gitkeep)
+
+# ── macOS ─────────────────────────────────────────────────────────────────────
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+
+# ── IDEs ──────────────────────────────────────────────────────────────────────
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# ── Claude Code internal ──────────────────────────────────────────────────────
+.claude/
