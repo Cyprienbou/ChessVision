@@ -138,7 +138,7 @@ select { background: #0f3460; color: #e0e0e0; border: 1px solid #00b894; border-
                  border-radius: 5px; padding: 5px 13px; cursor: pointer; font-size: 0.85rem; }
 .cb-nav button:hover { background: #00b894; color: #1a1a2e; }
 .cb-step { color: #a0a0c0; font-size: 0.82rem; }
-.cb-right { display: flex; flex-direction: column; }
+.cb-right { display: flex; flex-direction: column; flex: 0 0 210px; min-width: 210px; }
 .cb-move-list { font-family: 'Segoe UI', monospace; font-size: 0.9rem; line-height: 1.8;
                 max-height: 420px; overflow-y: auto; min-width: 200px; padding: 4px 2px; }
 .cb-pair { display: flex; gap: 6px; align-items: baseline; }
@@ -232,6 +232,15 @@ select { background: #0f3460; color: #e0e0e0; border: 1px solid #00b894; border-
 .trap-mv.cur { background: #fdcb6e22; border-color: #fdcb6e; font-weight: 700; }
 .trap-mv.trap-move { color: #ff6b6b; }
 .trap-mv.trap-move.cur { background: #ff6b6b22; border-color: #ff6b6b; }
+.trap-match-badge { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px;
+  padding-top: 10px; border-top: 1px solid #3a2e00; }
+.trap-match-eco  { font-size: 0.72rem; padding: 2px 8px; border-radius: 8px;
+  background: #2a2000; color: #d4b400; border: 1px solid #4a3c00; }
+.trap-match-strat { font-size: 0.72rem; padding: 2px 8px; border-radius: 8px; }
+.trap-match-strat.hi  { background: #002a12; color: #00b894; border: 1px solid #005a28; }
+.trap-match-strat.med { background: #2a1800; color: #e17055; border: 1px solid #5a3000; }
+.trap-match-src  { font-size: 0.72rem; padding: 2px 8px; border-radius: 8px;
+  background: #0d1b38; color: #6c7a9c; border: 1px solid #0f3460; }
 
 /* ── Documentation tab ──────────────────────────────────────────────────────── */
 .doc-toc { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 36px; }
@@ -1094,26 +1103,39 @@ def _build_dashboard(df: pd.DataFrame, opening_df: pd.DataFrame, username: str) 
             _t_eco  = _t.get("eco", "")
             _t_op   = _t.get("opening", "").lower()
             _op_low = _op_name.lower()
-            # Primary: exact ECO prefix match (3 chars)
+            # Primary: exact ECO prefix match (3 chars) — high confidence
             _eco_match  = bool(_op_eco and _t_eco and _op_eco[:3] == _t_eco[:3])
-            # Secondary: opening name containment (only if ECO also same letter group)
-            _same_group = _op_eco and _t_eco and _op_eco[0] == _t_eco[0]
-            _name_match = _same_group and _t_op and _op_low and (
-                _t_op in _op_low or _op_low in _t_op or
-                # Match on the base opening name (before the colon) having 2+ significant words in common
-                len(set(w for w in _t_op.split(":")[0].split() if len(w) > 4) &
-                    set(w for w in _op_low.split() if len(w) > 4)) >= 1
+            # Secondary: 2-char ECO prefix match — medium confidence
+            # e.g. C57 matches C50 (both Italian/Two Knights family)
+            _eco2_match = (not _eco_match) and bool(
+                _op_eco and _t_eco and len(_op_eco) >= 2 and len(_t_eco) >= 2 and
+                _op_eco[:2] == _t_eco[:2]
             )
-            if _eco_match or _name_match:
-                # Pre-compute steps so JS doesn't need a chess engine
+            if _eco_match or _eco2_match:
+                _strategy    = "eco_prefix" if _eco_match else "eco_group"
+                _confidence  = "high"       if _eco_match else "medium"
                 _t_with_steps = dict(_t)
                 _t_with_steps["steps"] = _build_trap_steps(
                     _t.get("moves_san", []),
                     _t.get("trap_move_index", 999),
                 )
+                _t_with_steps["_match_strategy"]    = _strategy
+                _t_with_steps["_match_confidence"]  = _confidence
+                _t_with_steps["_matched_eco"]       = _op_eco
+                _t_with_steps["_matched_opening"]   = str(_op_name)
                 _matched.append(_t_with_steps)
         if _matched:
             _traps_by_opening[str(_op_name)] = _matched
+
+    # ── Trap matching quality log ─────────────────────────────────────────────
+    _total_matched = sum(len(v) for v in _traps_by_opening.values())
+    _high  = sum(1 for v in _traps_by_opening.values()
+                 for t in v if t.get("_match_confidence") == "high")
+    _med   = _total_matched - _high
+    print(f"[reporter] Trap matching: {len(_traps_by_opening)} openings matched, "
+          f"{_total_matched} trap slots "
+          f"({_high} high-confidence ECO matches, {_med} ECO-group matches)")
+
     traps_js = json.dumps(_traps_by_opening)
 
     # ── Recurring mistake pattern analysis ────────────────────────────────────
@@ -1291,14 +1313,18 @@ def _build_dashboard(df: pd.DataFrame, opening_df: pd.DataFrame, username: str) 
 .op-board-theory {{
   display: flex;
   gap: 28px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: flex-start;
   margin: 16px 0 24px;
+  overflow-x: auto;
+  padding-bottom: 6px;
 }}
+.op-board-theory > div:first-child {{ flex: 0 0 auto; }}
 .op-theory-col {{
   display: flex;
   flex-direction: column;
   gap: 12px;
+  flex: 0 0 220px;
   min-width: 220px;
 }}
 .theory-depth-box {{
@@ -2829,6 +2855,11 @@ function _showTrap(opName, idx) {{
         <div class="trap-desc-title">${{trap.name}}</div>
         ${{trap.description || ''}}
         ${{trap.trap_move_index < 999 ? `<div style="margin-top:10px;font-size:0.78rem;color:#a09060">&#9888; Trap springs on move ${{Math.ceil((trap.trap_move_index+1)/2)}}</div>` : ''}}
+        <div class="trap-match-badge" title="How this trap was linked to the current opening">
+          <span class="trap-match-eco">ECO ${{trap.eco}}</span>
+          <span class="trap-match-strat ${{trap._match_confidence === 'high' ? 'hi' : 'med'}}">${{trap._match_confidence === 'high' ? '&#10003; ECO match' : '&#8776; name match'}}</span>
+          <span class="trap-match-src">src: ${{trap.source || '?'}}</span>
+        </div>
       </div>
     </div>`;
 
